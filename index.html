@@ -3,58 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultron OS</title>
+    <title>ULTRON</title>
     <style>
-        body { background: #050505; color: #ff3b30; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .ultron-btn { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, #200 0%, #000 100%); border: 3px solid #ff3b30; box-shadow: 0 0 20px #ff3b30; cursor: pointer; transition: all 0.3s; font-weight: bold; color: #fff; }
-        .ultron-btn:active { transform: scale(0.95); box-shadow: 0 0 40px #ff0000; background: #400; }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .btn-container {
+            text-align: center;
+        }
+
+        #record-btn {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #800000 0%, #330000 100%);
+            border: 4px solid #ff0000;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            cursor: pointer;
+            outline: none;
+            box-shadow: 0 0 20px #ff0000;
+            transition: all 0.3s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #record-btn:active {
+            background: radial-gradient(circle, #ff0000 0%, #800000 100%);
+            box-shadow: 0 0 40px #ff0000, inset 0 0 20px #000;
+            transform: scale(0.95);
+        }
+
+        #status {
+            color: #a0a0a0;
+            margin-top: 25px;
+            font-size: 14px;
+            letter-spacing: 1px;
+            min-height: 20px;
+        }
     </style>
 </head>
 <body>
 
-    <button class="ultron-btn" id="btnUltron">HABLAR</button>
+    <div class="btn-container">
+        <button id="record-btn">HABLAR</button>
+        <div id="status">SISTEMA ONLINE - MANTÉN PRESIONADO PARA HABLAR</div>
+    </div>
 
     <script>
+        const btn = document.getElementById('record-btn');
+        const statusText = document.getElementById('status');
         let mediaRecorder;
         let audioChunks = [];
-        const btn = document.getElementById('btnUltron');
 
-        btn.addEventListener('mousedown', async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.onstop = sendAudioToUltron;
+        btn.addEventListener('mousedown', startRecording);
+        btn.addEventListener('mouseup', stopRecording);
+        
+        // Soporte para pantallas táctiles de celular
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
+
+        async function startRecording() {
             audioChunks = [];
-            mediaRecorder.start();
-            btn.innerText = "ESCUCHANDO...";
-        });
+            statusText.innerText = "ESCUCHANDO...";
+            btn.style.border = "4px solid #ff5555";
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
 
-        btn.addEventListener('mouseup', () => {
-            mediaRecorder.stop();
-            btn.innerText = "PROCESANDO...";
-        });
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await procesarVozUltron(audioBlob);
+                };
 
-        async function sendAudioToUltron() {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const formData = new FormData();
-            formData.append('file', audioBlob);
+                mediaRecorder.start();
+            } catch (err) {
+                console.error("Error al acceder al micrófono:", err);
+                statusText.innerText = "ERROR: REQUIERE MICRÓFONO";
+                resetButton();
+            }
+        }
 
-            // 1. Enviar audio para transcribir
-            const resListen = await fetch('/api/listen', { method: 'POST', body: formData });
-            const dataListen = await resListen.json();
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+                // Detiene el uso del micrófono en segundo plano
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        }
 
-            // 2. Enviar texto para que Ultron piense y devuelva voz
-            const resThink = await fetch('/api/think', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: dataListen.text })
-            });
-            const dataThink = await resThink.json();
+        async function procesarVozUltron(audioBlob) {
+            statusText.innerText = "PROCESANDO...";
+            
+            try {
+                // Paso 1: Transcribir el audio enviándolo al endpoint de Python
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'audio.webm');
 
-            // 3. REPRODUCCIÓN AUTOMÁTICA DE VOZ
-            // Aquí reproduciremos el audio que nos devuelva la API
-            console.log("Ultron dijo:", dataThink.text);
-            btn.innerText = "HABLAR";
+                const listenResponse = await fetch('/api/listen', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!listenResponse.ok) throw new Error('Fallo en la transcripción /api/listen');
+                const listenData = await listenResponse.json();
+                
+                if (!listenData.text || listenData.text.trim() === "") {
+                    statusText.innerText = "NO LOGRÉ ESCUCHARTE BIEN";
+                    resetButton();
+                    return;
+                }
+
+                // Paso 2 y 3: Pasar el texto al pensador de Ultron para recibir el archivo de audio respuesta
+                const thinkResponse = await fetch('/api/think', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: listenData.text })
+                });
+
+                if (!thinkResponse.ok) throw new Error('Fallo en la respuesta de inteligencia /api/think');
+                
+                const audioResponseBlob = await thinkResponse.blob();
+                const audioUrl = URL.createObjectURL(audioResponseBlob);
+                
+                // Paso 4: Reproducir la voz imponente de Ultron
+                statusText.innerText = "RESPONDIENDO...";
+                const audio = new Audio(audioUrl);
+                audio.play();
+
+                audio.onended = () => {
+                    statusText.innerText = "SISTEMA ONLINE";
+                    resetButton();
+                };
+
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "ERROR CRÍTICO EN TRANSMISIÓN";
+                resetButton();
+            }
+        }
+
+        function resetButton() {
+            btn.style.border = "4px solid #ff0000";
+            setTimeout(() => {
+                if(statusText.innerText === "SISTEMA ONLINE" || statusText.innerText.includes("ERROR")) {
+                    statusText.innerText = "SISTEMA ONLINE - MANTÉN PRESIONADO PARA HABLAR";
+                }
+            }, 3000);
         }
     </script>
 </body>
