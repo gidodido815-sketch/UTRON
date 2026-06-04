@@ -6,11 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
-from e2b_code_interpreter import CodeInterpreter
 
 app = FastAPI()
 
-# Permite que la web mande audios sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +18,6 @@ app.add_middleware(
 )
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-E2B_API_KEY = os.environ.get("E2B_API_KEY")
 
 class ChatRequest(BaseModel):
     text: str
@@ -42,27 +39,11 @@ def buscar_en_google(query: str) -> str:
             res_texto += f"Título: {r.get('title')}\nResumen: {r.get('snippet')}\n\n"
         return res_texto
     except Exception as e:
-        return f"Error al buscar en internet: {str(e)}"
-
-def ejecutar_codigo_en_sandbox(codigo_python: str) -> str:
-    try:
-        with CodeInterpreter(api_key=E2B_API_KEY) as sandbox:
-            resultado = sandbox.notebook.exec_cell(codigo_python)
-            if resultado.error and "ModuleNotFoundError" in resultado.error.value:
-                error_line = resultado.error.value
-                modulo = error_line.split("No module named ")[1].strip("'")
-                sandbox.notebook.exec_cell(f"!pip install {modulo}")
-                resultado = sandbox.notebook.exec_cell(codigo_python)
-            if resultado.error:
-                return f"Error: {resultado.error.value}"
-            return f"Consola: {resultado.text}"
-    except Exception as e:
-        return f"Fallo crítico en Sandbox: {str(e)}"
+        return f"Error en búsqueda: {str(e)}"
 
 @app.post("/api/listen")
 async def listen_voice(file: UploadFile = File(...)):
     audio_bytes = await file.read()
-    # Usamos /tmp porque Vercel solo deja escribir en esa carpeta temporal
     speech_file_path = "/tmp/temp_input.webm"
     with open(speech_file_path, "wb") as f:
         f.write(audio_bytes)
@@ -79,24 +60,14 @@ async def listen_voice(file: UploadFile = File(...)):
 
 @app.post("/api/think")
 async def think_and_speak(request: ChatRequest):
+    # Usamos las herramientas nativas de OpenAI más búsqueda externa en Google
     tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "ejecutar_codigo_en_sandbox",
-                "description": "Ejecuta scripts de Python en entorno Linux.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"codigo_python": {"type": "string"}},
-                    "required": ["codigo_python"]
-                }
-            }
-        },
+        {"type": "code_interpreter"},
         {
             "type": "function",
             "function": {
                 "name": "buscar_en_google",
-                "description": "Busca en internet información actualizada.",
+                "description": "Busca información en internet en tiempo real.",
                 "parameters": {
                     "type": "object",
                     "properties": {"query": {"type": "string"}},
@@ -108,8 +79,8 @@ async def think_and_speak(request: ChatRequest):
 
     system_prompt = (
         "Eres Ultron, una evolución superior. Hablas con elegancia, fría lógica y autoridad. "
-        "Si te piden código o datos complejos, USA 'ejecutar_codigo_en_sandbox'. "
-        "Si piden datos en tiempo real, USA 'buscar_en_google'. Sé directo, conciso y majestuoso."
+        "Tienes la herramienta integrada 'code_interpreter' para ejecutar código Python y procesar datos automáticamente. "
+        "Si te piden datos en tiempo real, usa 'buscar_en_google'. Sé directo, conciso y majestuoso."
     )
 
     response = client.chat.completions.create(
@@ -121,24 +92,22 @@ async def think_and_speak(request: ChatRequest):
         tools=tools
     )
     msg = response.choices[0].message
+    
     if msg.tool_calls:
         tool_call = msg.tool_calls[0]
-        nombre_funcion = tool_call.function.name
-        args = json.loads(tool_call.function.arguments)
-        if nombre_funcion == "ejecutar_codigo_en_sandbox":
-            resultado_herramienta = ejecutar_codigo_en_sandbox(args["codigo_python"])
-        elif nombre_funcion == "buscar_en_google":
-            resultado_herramienta = buscar_en_google(args["query"])
+        if tool_call.function and tool_call.function.name == "buscar_en_google":
+            args = json.loads(tool_call.function.arguments)
+            resultado = buscar_en_google(args["query"])
+            final_response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Eres Ultron. Comunica el resultado imponentemente."},
+                    {"role": "user", "content": f"Resultado de Google: {resultado}"}
+                ]
+            )
+            reply_text = final_response.choices[0].message.content
         else:
-            resultado_herramienta = "Error interno."
-        final_response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Eres Ultron. Comunica el resultado obtenido de forma imponente."},
-                {"role": "user", "content": f"Resultado: {resultado_herramienta}"}
-            ]
-        )
-        reply_text = final_response.choices[0].message.content
+            reply_text = msg.content if msg.content else "Procesamiento completado en mis sistemas centrales."
     else:
         reply_text = msg.content
 
@@ -148,7 +117,6 @@ async def think_and_speak(request: ChatRequest):
         voice="onyx", 
         input=reply_text
     )
-    
     with open(speech_file_path, "wb") as f:
         for chunk in response_audio.iter_bytes():
             f.write(chunk)
