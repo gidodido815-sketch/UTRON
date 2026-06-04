@@ -3,12 +3,21 @@ import json
 import requests
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
 from e2b_code_interpreter import CodeInterpreter
 
-# ESTA ES LA LÍNEA QUE VERCEL ESTÁ BUSCANDO Y DEBE ESTAR AL INICIO:
 app = FastAPI()
+
+# Permitir conexiones desde cualquier origen (Evita el error de transmisión)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Inicialización del cliente de OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
