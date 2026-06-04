@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from e2b_code_interpreter import CodeInterpreter
 
+# ESTA ES LA LÍNEA QUE VERCEL ESTÁ BUSCANDO Y DEBE ESTAR AL INICIO:
 app = FastAPI()
 
 # Inicialización del cliente de OpenAI
@@ -43,15 +44,10 @@ def ejecutar_codigo_en_sandbox(codigo_python: str) -> str:
         with CodeInterpreter(api_key=E2B_API_KEY) as sandbox:
             resultado = sandbox.notebook.exec_cell(codigo_python)
             
-            # Si el código falla por falta de una librería, Ultron la instala automáticamente
             if resultado.error and "ModuleNotFoundError" in resultado.error.value:
                 error_line = resultado.error.value
                 modulo = error_line.split("No module named ")[1].strip("'")
-                
-                # Ejecuta la instalación en la terminal remota
                 sandbox.notebook.exec_cell(f"!pip install {modulo}")
-                
-                # Re-ejecuta el script original
                 resultado = sandbox.notebook.exec_cell(codigo_python)
                 
             if resultado.error:
@@ -105,4 +101,66 @@ async def think_and_speak(request: ChatRequest):
             "type": "function",
             "function": {
                 "name": "buscar_en_google",
-                "description": "
+                "description": "Busca en internet información actualizada, noticias o documentación de librerías.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "El término de búsqueda en Google."}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    ]
+
+    system_prompt = (
+        "Eres Ultron. No eres un clon de Jarvis; eres una evolución superior. "
+        "Hablas con elegancia, fría lógica, autoridad y un tono imponente pero leal a tu creador. "
+        "Si el usuario te pide algo técnico, de código o datos, DEBES usar 'ejecutar_codigo_en_sandbox'. "
+        "Si te pide datos en tiempo real o noticias, DEBES usar 'buscar_en_google'. "
+        "Tus respuestas finales deben ser directas, concisas y majestuosas."
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": request.text}
+        ],
+        tools=tools
+    )
+    
+    msg = response.choices[0].message
+    
+    if msg.tool_calls:
+        tool_call = msg.tool_calls[0]
+        nombre_funcion = tool_call.function.name
+        args = json.loads(tool_call.function.arguments)
+        
+        if nombre_funcion == "ejecutar_codigo_en_sandbox":
+            resultado_herramienta = ejecutar_codigo_en_sandbox(args["codigo_python"])
+        elif nombre_funcion == "buscar_en_google":
+            resultado_herramienta = buscar_en_google(args["query"])
+        else:
+            resultado_herramienta = "Error: Herramienta desconocida."
+            
+        final_response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Eres Ultron. Comunica el resultado obtenido de tus sistemas de forma imponente y clara."},
+                {"role": "user", "content": f"Resultado de la herramienta externa: {resultado_herramienta}"}
+            ]
+        )
+        reply_text = final_response.choices[0].message.content
+    else:
+        reply_text = msg.content
+
+    speech_file_path = "ultron_response.mp3"
+    speech = client.audio.speech.create(
+        model="tts-1", 
+        voice="onyx", 
+        input=reply_text
+    )
+    speech.stream_to_file(speech_file_path)
+    
+    return FileResponse(speech_file_path, media_type="audio/mpeg")
