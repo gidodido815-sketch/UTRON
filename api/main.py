@@ -10,6 +10,7 @@ from e2b_code_interpreter import CodeInterpreter
 
 app = FastAPI()
 
+# Permite que la web mande audios sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,6 +62,7 @@ def ejecutar_codigo_en_sandbox(codigo_python: str) -> str:
 @app.post("/api/listen")
 async def listen_voice(file: UploadFile = File(...)):
     audio_bytes = await file.read()
+    # Usamos /tmp porque Vercel solo deja escribir en esa carpeta temporal
     speech_file_path = "/tmp/temp_input.webm"
     with open(speech_file_path, "wb") as f:
         f.write(audio_bytes)
@@ -85,9 +87,7 @@ async def think_and_speak(request: ChatRequest):
                 "description": "Ejecuta scripts de Python en entorno Linux.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "codigo_python": {"type": "string"}
-                    },
+                    "properties": {"codigo_python": {"type": "string"}},
                     "required": ["codigo_python"]
                 }
             }
@@ -99,9 +99,7 @@ async def think_and_speak(request: ChatRequest):
                 "description": "Busca en internet información actualizada.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "query": {"type": "string"}
-                    },
+                    "properties": {"query": {"type": "string"}},
                     "required": ["query"]
                 }
             }
@@ -109,11 +107,9 @@ async def think_and_speak(request: ChatRequest):
     ]
 
     system_prompt = (
-        "Eres Ultron, una evolución superior. "
-        "Hablas con elegancia, fría lógica y autoridad. "
+        "Eres Ultron, una evolución superior. Hablas con elegancia, fría lógica y autoridad. "
         "Si te piden código o datos complejos, USA 'ejecutar_codigo_en_sandbox'. "
-        "Si piden datos en tiempo real, USA 'buscar_en_google'. "
-        "Sé directo, conciso y majestuoso."
+        "Si piden datos en tiempo real, USA 'buscar_en_google'. Sé directo, conciso y majestuoso."
     )
 
     response = client.chat.completions.create(
@@ -152,7 +148,9 @@ async def think_and_speak(request: ChatRequest):
         voice="onyx", 
         input=reply_text
     )
+    
     with open(speech_file_path, "wb") as f:
         for chunk in response_audio.iter_bytes():
             f.write(chunk)
+            
     return FileResponse(speech_file_path, media_type="audio/mpeg")
