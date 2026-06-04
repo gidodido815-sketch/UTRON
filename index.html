@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultron OS</title>
+    <style>
+        body { background: #050505; color: #ff3b30; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .ultron-btn { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, #200 0%, #000 100%); border: 3px solid #ff3b30; box-shadow: 0 0 20px #ff3b30; cursor: pointer; transition: all 0.3s; font-weight: bold; color: #fff; }
+        .ultron-btn:active { transform: scale(0.95); box-shadow: 0 0 40px #ff0000; background: #400; }
+    </style>
+</head>
+<body>
+
+    <button class="ultron-btn" id="btnUltron">HABLAR</button>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        const btn = document.getElementById('btnUltron');
+
+        btn.addEventListener('mousedown', async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = sendAudioToUltron;
+            audioChunks = [];
+            mediaRecorder.start();
+            btn.innerText = "ESCUCHANDO...";
+        });
+
+        btn.addEventListener('mouseup', () => {
+            mediaRecorder.stop();
+            btn.innerText = "PROCESANDO...";
+        });
+
+        async function sendAudioToUltron() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('file', audioBlob);
+
+            // 1. Enviar audio para transcribir
+            const resListen = await fetch('/api/listen', { method: 'POST', body: formData });
+            const dataListen = await resListen.json();
+
+            // 2. Enviar texto para que Ultron piense y devuelva voz
+            const resThink = await fetch('/api/think', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: dataListen.text })
+            });
+            const dataThink = await resThink.json();
+
+            // 3. REPRODUCCIÓN AUTOMÁTICA DE VOZ
+            // Aquí reproduciremos el audio que nos devuelva la API
+            console.log("Ultron dijo:", dataThink.text);
+            btn.innerText = "HABLAR";
+        }
+    </script>
+</body>
+</html>
