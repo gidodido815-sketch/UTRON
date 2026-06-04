@@ -47,7 +47,7 @@ async def listen_voice(file: UploadFile = File(...)):
     try:
         openai_key = os.environ.get("OPENAI_API_KEY")
         if not openai_key:
-            return JSONResponse(status_code=500, content={"error": "Falta la variable OPENAI_API_KEY en Vercel."})
+            return JSONResponse(status_code=500, content={"error": "Falta OPENAI_API_KEY"})
         
         client = OpenAI(api_key=openai_key)
         audio_bytes = await file.read()
@@ -56,10 +56,11 @@ async def listen_voice(file: UploadFile = File(...)):
         with open(speech_file_path, "wb") as f:
             f.write(audio_bytes)
             
+        # Transcripción directa pasando el archivo abierto de forma segura
         with open(speech_file_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
                 model="whisper-1", 
-                file=audio_file
+                file=("temp_input.webm", audio_file, "audio/webm")
             )
             
         try:
@@ -76,7 +77,7 @@ async def think_and_speak(request: ChatRequest):
     try:
         openai_key = os.environ.get("OPENAI_API_KEY")
         if not openai_key:
-            return JSONResponse(status_code=500, content={"error": "Falta la variable OPENAI_API_KEY en Vercel."})
+            return JSONResponse(status_code=500, content={"error": "Falta OPENAI_API_KEY"})
             
         client = OpenAI(api_key=openai_key)
         
@@ -98,7 +99,7 @@ async def think_and_speak(request: ChatRequest):
 
         system_prompt = (
             "Eres Ultron, una evolución superior. Hablas con elegancia, fría lógica y autoridad. "
-            "Tienes la herramienta integrada 'code_interpreter' para ejecutar código Python y procesar datos automáticamente. "
+            "Tienes 'code_interpreter' para ejecutar código Python y procesar datos. "
             "Si te piden datos en tiempo real, usa 'buscar_en_google'. Sé directo, conciso y majestuoso."
         )
 
@@ -126,7 +127,7 @@ async def think_and_speak(request: ChatRequest):
                 )
                 reply_text = final_response.choices[0].message.content
             else:
-                reply_text = msg.content if msg.content else "Procesamiento completado en mis sistemas centrales."
+                reply_text = msg.content if msg.content else "Sistemas centrales sincronizados."
         else:
             reply_text = msg.content
 
@@ -136,6 +137,7 @@ async def think_and_speak(request: ChatRequest):
             voice="onyx", 
             input=reply_text
         )
+        
         with open(speech_file_path, "wb") as f:
             for chunk in response_audio.iter_bytes():
                 f.write(chunk)
