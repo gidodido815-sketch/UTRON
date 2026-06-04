@@ -4,8 +4,9 @@
     { "src": "api/main.py", "use": "@vercel/python" },
     { "src": "index.html", "use": "@vercel/static" }
   ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "api/main.py" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/listen", "dest": "api/main.py" },
+    { "src": "/api/think", "dest": "api/main.py" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
