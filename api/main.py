@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
 
+# La variable DEBE llamarse app y estar en la raíz del archivo
 app = FastAPI()
 
 app.add_middleware(
@@ -20,27 +21,9 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     text: str
 
-def buscar_en_google(query: str) -> str:
-    api_key = os.environ.get("SERPAPI_API_KEY")
-    if not api_key:
-        return "Falta la API Key de SerpAPI."
-    url = "https://serpapi.com/search"
-    params = {
-        "q": query,
-        "api_key": api_key,
-        "engine": "google"
-    }
-    try:
-        response = requests.get(url, params=params).json()
-        resultados = response.get("organic_results", [])
-        if not resultados:
-            return "No encontré resultados relevantes."
-        res_texto = ""
-        for r in resultados[:3]:
-            res_texto += f"Título: {r.get('title')}\nResumen: {r.get('snippet')}\n\n"
-        return res_texto
-    except Exception as e:
-        return f"Error en búsqueda: {str(e)}"
+@app.get("/api/health")
+def health_check():
+    return {"status": "online", "bot": "ultron"}
 
 @app.post("/api/listen")
 async def listen_voice(file: UploadFile = File(...)):
@@ -56,7 +39,6 @@ async def listen_voice(file: UploadFile = File(...)):
         with open(speech_file_path, "wb") as f:
             f.write(audio_bytes)
             
-        # Transcripción directa pasando el archivo abierto de forma segura
         with open(speech_file_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
                 model="whisper-1", 
@@ -81,26 +63,9 @@ async def think_and_speak(request: ChatRequest):
             
         client = OpenAI(api_key=openai_key)
         
-        tools = [
-            {"type": "code_interpreter"},
-            {
-                "type": "function",
-                "function": {
-                    "name": "buscar_en_google",
-                    "description": "Busca información en internet en tiempo real.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"query": {"type": "string"}},
-                        "required": ["query"]
-                    }
-                }
-            }
-        ]
-
         system_prompt = (
             "Eres Ultron, una evolución superior. Hablas con elegancia, fría lógica y autoridad. "
-            "Tienes 'code_interpreter' para ejecutar código Python y procesar datos. "
-            "Si te piden datos en tiempo real, usa 'buscar_en_google'. Sé directo, conciso y majestuoso."
+            "Sé directo, conciso y majestuoso."
         )
 
         response = client.chat.completions.create(
@@ -108,28 +73,9 @@ async def think_and_speak(request: ChatRequest):
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": request.text}
-            ],
-            tools=tools
+            ]
         )
-        msg = response.choices[0].message
-        
-        if msg.tool_calls:
-            tool_call = msg.tool_calls[0]
-            if tool_call.function and tool_call.function.name == "buscar_en_google":
-                args = json.loads(tool_call.function.arguments)
-                resultado = buscar_en_google(args["query"])
-                final_response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "Eres Ultron. Comunica el resultado imponentemente."},
-                        {"role": "user", "content": f"Resultado de Google: {resultado}"}
-                    ]
-                )
-                reply_text = final_response.choices[0].message.content
-            else:
-                reply_text = msg.content if msg.content else "Sistemas centrales sincronizados."
-        else:
-            reply_text = msg.content
+        reply_text = response.choices[0].message.content
 
         speech_file_path = "/tmp/ultron_response.mp3"
         response_audio = client.audio.speech.create(
