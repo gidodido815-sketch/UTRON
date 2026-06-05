@@ -69,6 +69,33 @@ def read_root():
     return HTMLResponse(INDEX_HTML)
 
 
+@app.get("/api/test")
+def test_brain():
+    """Prueba el cerebro directo desde el navegador y muestra el error exacto."""
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        return {"ok": False, "stage": "key", "error": "Falta OPENAI_API_KEY"}
+    client = OpenAI(api_key=key)
+    # 1) Probar el modelo de texto
+    try:
+        r = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[{"role": "user", "content": "Di la palabra: hola"}],
+        )
+        chat_reply = r.choices[0].message.content
+    except Exception as e:
+        return {"ok": False, "stage": "chat", "model": CHAT_MODEL, "error": str(e)}
+    # 2) Probar la voz
+    try:
+        a = client.audio.speech.create(
+            model=TTS_MODEL, voice=TTS_VOICE, input="Hola", instructions=VOICE_INSTRUCTIONS
+        )
+        n = sum(len(ch) for ch in a.iter_bytes())
+    except Exception as e:
+        return {"ok": False, "stage": "tts", "tts": TTS_MODEL, "chat_reply": chat_reply, "error": str(e)}
+    return {"ok": True, "chat_reply": chat_reply, "tts_bytes": n}
+
+
 @app.get("/api/health")
 def health_check():
     return {
