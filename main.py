@@ -71,7 +71,14 @@ def read_root():
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "online", "bot": "ultron", "model": CHAT_MODEL, "tts": TTS_MODEL}
+    return {
+        "status": "online",
+        "bot": "ultron",
+        "model": CHAT_MODEL,
+        "tts": TTS_MODEL,
+        "key_set": bool(os.environ.get("OPENAI_API_KEY")),
+        "serpapi_set": bool(os.environ.get("SERPAPI_API_KEY")),
+    }
 
 
 def buscar_en_google(query: str) -> str:
