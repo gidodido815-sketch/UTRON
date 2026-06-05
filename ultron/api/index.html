@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULTRON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#040405; --red:#ff1b1b; --red-glow:rgba(255,27,27,.55);
+    --steel-light:#525a66; --ash:#8a8f99;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:radial-gradient(circle at 50% 30%, #14070a 0%, #050506 55%, #020203 100%);
+    color:var(--ash); font-family:'Share Tech Mono',monospace; overflow:hidden;
+    height:100vh; -webkit-user-select:none; user-select:none;
+  }
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(0,0,0,.22) 3px,transparent 4px);
+    mix-blend-mode:multiply;opacity:.5;}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:radial-gradient(circle at 50% 32%, transparent 38%, rgba(0,0,0,.72) 100%);}
+
+  .app{position:relative;z-index:4;height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:18px 16px 70px;}
+
+  /* ---- Rostro ---- */
+  .face-wrap{position:relative;width:min(46vw,180px);aspect-ratio:1/1;margin-top:6px;cursor:pointer;flex:none;}
+  .halo{position:absolute;inset:-12%;border-radius:50%;
+    background:radial-gradient(circle,var(--red-glow) 0%,transparent 62%);filter:blur(6px);opacity:0;transition:opacity .6s;}
+  body.idle .halo{opacity:.28;animation:breathe 4.6s ease-in-out infinite;}
+  body.listening .halo{opacity:.7;animation:breathe 1.3s ease-in-out infinite;}
+  body.processing .halo{opacity:.5;animation:flicker .25s steps(2) infinite;}
+  body.speaking .halo{opacity:.85;}
+  svg{width:100%;height:100%;display:block;overflow:visible;}
+  .plate{fill:#0c0e12;stroke:var(--steel-light);stroke-width:1.4;}
+  .plate-d{fill:#15181d;stroke:#3a414c;stroke-width:1.2;}
+  .seam{stroke:#3a414c;stroke-width:1.4;fill:none;}
+  .eye{fill:var(--red);filter:url(#glow);}
+  body.init .eye{fill:#3a0d0d;filter:none;}
+  body.idle .eye{animation:eyePulse 4.6s ease-in-out infinite;}
+  body.listening .eye{animation:eyePulse 1.1s ease-in-out infinite;}
+  body.processing .eye{animation:flicker .18s steps(2) infinite;}
+  body.speaking .eye{fill:#ff5252;}
+  .grille line{stroke:var(--red);stroke-width:4;stroke-linecap:round;filter:url(#glow);transform-origin:center;opacity:.25;}
+  body.speaking .grille line{animation:talk .5s ease-in-out infinite;}
+  body.speaking .grille line:nth-child(1){animation-delay:0s}
+  body.speaking .grille line:nth-child(2){animation-delay:.12s}
+  body.speaking .grille line:nth-child(3){animation-delay:.06s}
+  body.speaking .grille line:nth-child(4){animation-delay:.18s}
+  body.speaking .grille line:nth-child(5){animation-delay:.09s}
+  @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  @keyframes eyePulse{0%,100%{opacity:.55}50%{opacity:1}}
+  @keyframes flicker{0%{opacity:.3}100%{opacity:1}}
+  @keyframes talk{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+
+  .title{font-family:'Chakra Petch',sans-serif;font-weight:700;letter-spacing:.5em;
+    font-size:clamp(20px,6vw,30px);color:#e9edf2;text-shadow:0 0 14px var(--red-glow);margin:14px 0 4px;padding-left:.5em;}
+  .status{font-size:12px;letter-spacing:.16em;min-height:16px;text-transform:uppercase;color:var(--ash);}
+  .status b{color:var(--red);}
+
+  #power{font-family:'Chakra Petch',sans-serif;font-weight:600;letter-spacing:.22em;margin-top:18px;
+    background:linear-gradient(180deg,#1a0306,#3d0709);color:#ffd9d9;border:1.5px solid var(--red);
+    border-radius:6px;padding:13px 28px;font-size:13px;cursor:pointer;
+    box-shadow:0 0 18px rgba(255,27,27,.35),inset 0 0 12px rgba(0,0,0,.6);transition:transform .15s,box-shadow .3s;}
+  #power:hover{box-shadow:0 0 28px var(--red-glow),inset 0 0 12px rgba(0,0,0,.6);}
+  #power:active{transform:scale(.96);}
+  .hidden{display:none!important;}
+
+  /* ---- HUD de conversación (memoria) ---- */
+  .hud{width:100%;max-width:560px;flex:1;margin-top:16px;overflow-y:auto;
+    display:flex;flex-direction:column;gap:10px;padding:4px 4px 0;
+    mask-image:linear-gradient(to bottom,transparent,#000 22px);}
+  .hud::-webkit-scrollbar{width:5px;}
+  .hud::-webkit-scrollbar-thumb{background:#3a0d0d;border-radius:3px;}
+  .line{font-size:13px;line-height:1.5;letter-spacing:.02em;max-width:88%;padding:9px 13px;border-radius:8px;
+    animation:fadein .3s ease;}
+  .line .who{font-family:'Chakra Petch',sans-serif;font-size:9px;letter-spacing:.25em;opacity:.6;display:block;margin-bottom:3px;}
+  .line.user{align-self:flex-end;background:rgba(50,56,66,.35);border:1px solid #2a2e35;color:#cfd4db;}
+  .line.bot{align-self:flex-start;background:rgba(60,5,7,.4);border:1px solid #5e0000;color:#ffdede;}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+
+  .toolbar{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:center;
+    gap:18px;padding:12px;background:linear-gradient(0deg,#040405 40%,transparent);}
+  .tool-btn{background:none;border:1px solid #3a414c;color:#8a8f99;border-radius:5px;padding:7px 12px;
+    font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.12em;cursor:pointer;transition:.2s;}
+  .tool-btn:hover{border-color:var(--red);color:#ffdede;}
+  .tool-btn.on{border-color:var(--red);color:#ff6b6b;box-shadow:0 0 10px rgba(255,27,27,.25);}
+  .ai-note{font-size:9px;letter-spacing:.2em;color:#41454c;}
+</style>
+</head>
+<body class="init">
+<div class="app">
+  <div class="face-wrap" id="face">
+    <div class="halo"></div>
+    <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" aria-label="Ultron">
+      <defs><filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="3.4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+      <path class="plate" d="M100 8 L150 30 L168 78 L160 150 L128 198 L100 210 L72 198 L40 150 L32 78 L50 30 Z"/>
+      <path class="plate-d" d="M100 8 L150 30 L154 70 L100 86 L46 70 L50 30 Z"/>
+      <line class="seam" x1="100" y1="8" x2="100" y2="210"/>
+      <path class="seam" d="M46 70 L100 86 L154 70"/>
+      <path class="seam" d="M40 150 L100 132 L160 150"/>
+      <path class="plate-d" d="M52 96 L92 104 L86 124 L56 122 Z"/>
+      <path class="plate-d" d="M148 96 L108 104 L114 124 L144 122 Z"/>
+      <polygon class="eye" points="58,104 88,109 83,120 60,118"/>
+      <polygon class="eye" points="142,104 112,109 117,120 140,118"/>
+      <g class="grille" transform="translate(0,168)">
+        <line x1="76" y1="-9" x2="76" y2="9"/><line x1="88" y1="-13" x2="88" y2="13"/>
+        <line x1="100" y1="-15" x2="100" y2="15"/><line x1="112" y1="-13" x2="112" y2="13"/>
+        <line x1="124" y1="-9" x2="124" y2="9"/>
+      </g>
+    </svg>
+  </div>
+
+  <h1 class="title">ULTRON</h1>
+  <div class="status" id="status">SISTEMA EN ESPERA</div>
+  <button id="power">INICIAR SISTEMA</button>
+
+  <div class="hud" id="hud"></div>
+</div>
+
+<div class="toolbar">
+  <button class="tool-btn on" id="convBtn">MODO CONVERSACIÓN: ON</button>
+  <button class="tool-btn" id="clearBtn">BORRAR MEMORIA</button>
+  <span class="ai-note">VOZ IA</span>
+</div>
+
+<script>
+const body=document.body, statusEl=document.getElementById('status'),
+      powerBtn=document.getElementById('power'), hud=document.getElementById('hud'),
+      face=document.getElementById('face'), convBtn=document.getElementById('convBtn'),
+      clearBtn=document.getElementById('clearBtn');
+
+const WAKE=['ultron','ultrón','ultrom','old tron','ultra on'];
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const MEM_KEY='ultron_memory_v1';
+const FOLLOWUP_MS=7000;
+
+let recognition=null, active=false, busy=false, listenMode='wake';
+let awaitingCommand=false, conversation=[], conversationMode=true, followTimer=null, currentAudio=null;
+
+/* ---------- Memoria persistente ---------- */
+function loadMemory(){
+  try{ const r=localStorage.getItem(MEM_KEY); if(r) conversation=JSON.parse(r)||[]; }catch(_){ conversation=[]; }
+  conversation.forEach(m=>renderLine(m.role,m.content));
+}
+function saveMemory(){
+  conversation=conversation.slice(-40);
+  try{ localStorage.setItem(MEM_KEY,JSON.stringify(conversation)); }catch(_){}
+}
+function renderLine(role,text){
+  const div=document.createElement('div');
+  div.className='line '+(role==='user'?'user':'bot');
+  div.innerHTML='<span class="who">'+(role==='user'?'TÚ':'ULTRON')+'</span>'+escapeHtml(text);
+  hud.appendChild(div); hud.scrollTop=hud.scrollHeight;
+}
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+function setState(s,t){ body.className=s; if(t!==undefined) statusEl.innerHTML=t; }
+
+/* ---------- Encendido ---------- */
+powerBtn.addEventListener('click', async ()=>{
+  try{ const st=await navigator.mediaDevices.getUserMedia({audio:true}); st.getTracks().forEach(t=>t.stop()); }
+  catch(e){ setState('init','<b>SE REQUIERE MICRÓFONO</b>'); return; }
+  powerBtn.classList.add('hidden');
+  active=true;
+  if(SR){ listenMode='wake'; startRecognition(); setState('idle','EN REPOSO — DI <b>“ULTRON”</b>'); }
+  else { setupPushToTalk(); }
+});
+
+/* ---------- Reconocimiento continuo ---------- */
+function startRecognition(){
+  if(!SR||busy||!active) return;
+  recognition=new SR();
+  recognition.lang='es-ES'; recognition.continuous=true; recognition.interimResults=false;
+
+  recognition.onresult=(ev)=>{
+    if(busy) return;
+    const t=ev.results[ev.results.length-1][0].transcript.toLowerCase().trim();
+    if(!t) return;
+
+    if(listenMode==='followup'){ clearTimeout(followTimer); procesar(t); return; }
+    if(awaitingCommand){ awaitingCommand=false; procesar(t); return; }
+
+    const hit=WAKE.find(w=>t.includes(w));
+    if(hit){
+      const resto=t.split(hit).pop().trim();
+      if(resto.length>1){ procesar(resto); }
+      else{ awaitingCommand=true; setState('listening','TE ESCUCHO...'); }
+    }
+  };
+  recognition.onerror=(e)=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){ active=false; setState('init','<b>MICRÓFONO BLOQUEADO</b>'); }
+  };
+  recognition.onend=()=>{
+    if(active&&!busy&&listenMode!=='followup'){ setTimeout(()=>{ try{recognition.start();}catch(_){} },250); }
+  };
+  try{ recognition.start(); }catch(_){}
+}
+
+function listenFollowup(){
+  if(!SR||!active){ volverAReposo(); return; }
+  listenMode='followup';
+  setState('listening','ESCUCHANDO RESPUESTA...');
+  try{ recognition.abort(); }catch(_){}
+  startRecognition();
+  followTimer=setTimeout(()=>{ try{recognition.abort();}catch(_){} volverAReposo(); }, FOLLOWUP_MS);
+}
+
+/* ---------- Pensar + hablar (con memoria) ---------- */
+async function procesar(texto){
+  busy=true; clearTimeout(followTimer);
+  if(recognition){ try{recognition.abort();}catch(_){} }
+  conversation.push({role:'user',content:texto}); renderLine('user',texto); saveMemory();
+  setState('processing','PROCESANDO...');
+
+  try{
+    const res=await fetch('/api/think',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:conversation})
+    });
+    const data=await res.json().catch(()=>({error:'Respuesta no válida del servidor'}));
+    if(!res.ok||data.error) throw new Error(data.error||('HTTP '+res.status));
+
+    conversation.push({role:'assistant',content:data.reply}); renderLine('bot',data.reply); saveMemory();
+
+    setState('speaking','RESPONDIENDO...');
+    currentAudio=new Audio('data:audio/mpeg;base64,'+data.audio);
+    currentAudio.onended=()=>{ if(conversationMode&&SR) listenFollowup(); else volverAReposo(); };
+    currentAudio.onerror=()=>volverAReposo();
+    await currentAudio.play();
+  }catch(err){
+    renderLine('bot','⚠ '+(err.message||'Error desconocido'));
+    setState('idle','<b>ERROR</b>'); setTimeout(volverAReposo,3000);
+  }
+}
+
+function volverAReposo(){
+  busy=false; awaitingCommand=false; listenMode='wake';
+  if(active&&SR){ setState('idle','EN REPOSO — DI <b>“ULTRON”</b>'); startRecognition(); }
+  else if(active){ setState('idle','MANTÉN PULSADO PARA HABLAR'); }
+}
+
+/* Tocar el rostro: invocar manualmente / interrumpir */
+face.addEventListener('click',()=>{
+  if(!active||!SR) return;
+  if(busy && currentAudio){ try{currentAudio.pause();}catch(_){} volverAReposo(); return; } // barge-in
+  awaitingCommand=true; clearTimeout(followTimer); setState('listening','TE ESCUCHO...');
+});
+
+/* ---------- Controles ---------- */
+convBtn.addEventListener('click',()=>{
+  conversationMode=!conversationMode;
+  convBtn.classList.toggle('on',conversationMode);
+  convBtn.textContent='MODO CONVERSACIÓN: '+(conversationMode?'ON':'OFF');
+});
+clearBtn.addEventListener('click',()=>{
+  conversation=[]; saveMemory(); hud.innerHTML='';
+  setState(body.className.split(' ')[0]||'idle','MEMORIA BORRADA');
+  setTimeout(()=>{ if(active&&!busy) setState('idle','EN REPOSO — DI <b>“ULTRON”</b>'); },1400);
+});
+
+/* ---------- Respaldo: pulsar para hablar ---------- */
+function setupPushToTalk(){
+  let mr,chunks=[];
+  setState('idle','MANTÉN PULSADO EL ROSTRO PARA HABLAR');
+  const start=async()=>{ if(busy) return; chunks=[];
+    try{ const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      mr=new MediaRecorder(stream,{mimeType:'audio/webm'});
+      mr.ondataavailable=e=>chunks.push(e.data);
+      mr.onstop=async()=>{ stream.getTracks().forEach(t=>t.stop()); await enviarAudio(new Blob(chunks,{type:'audio/webm'})); };
+      mr.start(); setState('listening','ESCUCHANDO...');
+    }catch(e){ setState('idle','<b>ERROR DE MICRÓFONO</b>'); } };
+  const stop=()=>{ if(mr&&mr.state!=='inactive') mr.stop(); };
+  face.addEventListener('mousedown',start); face.addEventListener('mouseup',stop);
+  face.addEventListener('touchstart',e=>{e.preventDefault();start();});
+  face.addEventListener('touchend',e=>{e.preventDefault();stop();});
+}
+async function enviarAudio(blob){
+  busy=true; setState('processing','TRANSCRIBIENDO...');
+  try{
+    const fd=new FormData(); fd.append('file',blob,'audio.webm');
+    const lr=await fetch('/api/listen',{method:'POST',body:fd});
+    const ld=await lr.json();
+    if(!ld.text||!ld.text.trim()){ setState('idle','NO TE ESCUCHÉ BIEN'); busy=false; return; }
+    busy=false; await procesar(ld.text);
+  }catch(e){ setState('idle','<b>ERROR</b>'); busy=false; }
+}
+
+loadMemory();
+</script>
+</body>
+</html>
